@@ -36,7 +36,7 @@ class Fleet1DriverApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Fleet1 Delivery Partner',
+      title: 'Fleet 1 Delivery',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       routerConfig: appRouter,

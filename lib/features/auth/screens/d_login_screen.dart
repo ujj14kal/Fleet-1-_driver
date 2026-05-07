@@ -70,7 +70,7 @@ class _DLoginScreenState extends State<DLoginScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Fleet1 Delivery Partner',
+                    'Fleet 1 Delivery',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
