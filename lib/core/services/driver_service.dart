@@ -4,6 +4,45 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class DriverService {
   static final _client = Supabase.instance.client;
 
+  // Fetch assigned shipments for a driver (one-time)
+  static Future<List<Map<String, dynamic>>> fetchAssignedShipments(String driverId) async {
+    try {
+      final data = await _client.from('shipments').select().eq('driver_id', driverId).order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(data as List);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // Stream assigned shipments for a driver (realtime)
+  static Stream<List<Map<String, dynamic>>> streamAssignedShipments(String driverId) {
+    if (driverId.isEmpty) return const Stream.empty();
+    return _client
+        .from('shipments')
+        .stream(primaryKey: ['id'])
+        .eq('driver_id', driverId)
+        .map((rows) => List<Map<String, dynamic>>.from(rows));
+  }
+
+  // Stream driver notifications for a driver (realtime)
+  static Stream<List<Map<String, dynamic>>> streamDriverNotifications(String driverId) {
+    if (driverId.isEmpty) return const Stream.empty();
+    return _client
+        .from('driver_notifications')
+        .stream(primaryKey: ['id'])
+        .eq('driver_id', driverId)
+        .map((rows) => List<Map<String, dynamic>>.from(rows));
+  }
+
+  // Save or update device token for push notifications
+  static Future<void> saveDeviceToken(String driverId, String deviceToken) async {
+    try {
+      await _client.from('drivers').update({'device_token': deviceToken}).eq('id', driverId);
+    } catch (_) {
+      // ignore
+    }
+  }
+
   static Future<void> completeOnboarding({
     required String fullName,
     required String phone,
