@@ -23,13 +23,20 @@ class AuthService {
         // Try to sign up if login fails (for demonstration/simplicity)
         final res = await _client.auth.signUp(email: email, password: password);
         if (res.user != null) {
-          // Create profile record
-          await _client.from('profiles').upsert({
-            'id': res.user!.id,
-            'role': 'driver',
-            'is_active': true,
-          });
-          await SessionService.saveRole('driver');
+          // Create or update profile record. Include `id = auth.uid()` so
+          // RLS policies that require new.id = auth.uid() will pass.
+          try {
+            await _client.from('profiles').upsert({
+              'id': res.user!.id,
+              'role': 'driver',
+              'is_active': true,
+            }, // returning minimal to avoid extra data
+            );
+            await SessionService.saveRole('driver');
+          } catch (e) {
+            // Surface a clearer message so the UI can explain RLS failures.
+            throw Exception('Failed to create profile: ${e.toString()} (possible RLS policy). Run the provided SQL migration to add compatible policies.');
+          }
         }
         return res;
       }

@@ -61,11 +61,20 @@ class _DOnboardingScreenState extends State<DOnboardingScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            Image.asset(
-              'assets/images/logo_fleet1.png',
-              width: 36,
-              height: 36,
-              fit: BoxFit.contain,
+            Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                border: Border.all(color: Color(0xFFFFD700), width: 2.5),
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+              ),
+              child: Image.asset(
+                'assets/images/logo_fleet1.png',
+                width: 36,
+                height: 36,
+                fit: BoxFit.contain,
+              ),
             ),
             const SizedBox(width: 12),
             const Text('Driver Onboarding'),
