@@ -53,7 +53,13 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
                 color: Colors.transparent,
                 border: Border.all(color: Color(0xFFFFD700), width: 2.5),
                 borderRadius: BorderRadius.circular(6),
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
               child: Image.asset(
                 'assets/images/logo_fleet1.png',
@@ -72,10 +78,14 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
             icon: const Icon(Icons.location_on),
             onPressed: () {
               // Quick hint: location sharing is managed per-assignment below.
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('Use the buttons on assignments to start/stop delivery and share location.'),
-                duration: Duration(seconds: 2),
-              ));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Use the buttons on assignments to start/stop delivery and share location.',
+                  ),
+                  duration: Duration(seconds: 2),
+                ),
+              );
             },
           ),
           IconButton(
@@ -103,7 +113,10 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.warning_amber_rounded, color: AppColors.primaryAmber),
+                    const Icon(
+                      Icons.warning_amber_rounded,
+                      color: AppColors.primaryAmber,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -111,7 +124,8 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
                         children: [
                           Text(
                             'Action Recommended',
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.primaryNavy,
                                 ),
@@ -133,13 +147,13 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
                   ],
                 ),
               ),
-              
+
             Text(
               'New Assignments',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primaryNavy,
-                  ),
+                fontWeight: FontWeight.bold,
+                color: AppColors.primaryNavy,
+              ),
             ),
             const SizedBox(height: 16),
             // In-app notifications (realtime)
@@ -147,27 +161,45 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
               StreamBuilder<List<Map<String, dynamic>>>(
                 stream: DriverService.streamDriverNotifications(_driverId!),
                 builder: (context, notifSnap) {
-                  if (!notifSnap.hasData || (notifSnap.data?.isEmpty ?? true)) return const SizedBox.shrink();
+                  if (!notifSnap.hasData || (notifSnap.data?.isEmpty ?? true)) {
+                    return const SizedBox.shrink();
+                  }
                   final latest = notifSnap.data!.first;
                   final msg = latest['message'] as String? ?? '';
                   return Container(
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: AppColors.navyLight, borderRadius: BorderRadius.circular(8)),
-                    child: Row(children: [const Icon(Icons.notifications, color: AppColors.primaryNavy), const SizedBox(width: 8), Expanded(child: Text(msg))]),
+                    decoration: BoxDecoration(
+                      color: AppColors.navyLight,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.notifications,
+                          color: AppColors.primaryNavy,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(msg)),
+                      ],
+                    ),
                   );
                 },
               ),
-            
+
             // Shipments assigned directly to this driver (realtime)
             StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _driverId == null ? const Stream.empty() : DriverService.streamAssignedShipments(_driverId!),
+              stream: _driverId == null
+                  ? const Stream.empty()
+                  : DriverService.streamAssignedShipments(_driverId!),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: Padding(
-                    padding: EdgeInsets.all(32.0),
-                    child: CircularProgressIndicator(),
-                  ));
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32.0),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
                 }
 
                 if (snapshot.hasError) {
@@ -175,7 +207,7 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
                 }
 
                 final assignedRides = snapshot.data ?? [];
-                
+
                 if (assignedRides.isEmpty) {
                   return const Center(
                     child: Padding(
@@ -187,9 +219,36 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
 
                 return Column(
                   children: assignedRides.map((ride) {
-                    final shipment = ride['shipment'] ?? {};
-                    final shipmentId = shipment['id']?.toString() ?? shipment['shipment_id']?.toString() ?? '';
-                    final trackingNumber = shipment['tracking_number'] ?? 'Unknown Tracking #';
+                    final shipment = Map<String, dynamic>.from(
+                      (ride['shipment'] as Map?) ?? ride,
+                    );
+                    final shipmentId =
+                        shipment['id']?.toString() ??
+                        shipment['shipment_id']?.toString() ??
+                        '';
+                    final trackingNumber =
+                        shipment['tracking_number']?.toString() ??
+                        shipment['shipment_code']?.toString() ??
+                        (shipmentId.isEmpty
+                            ? 'Unknown shipment'
+                            : shipmentId
+                                  .substring(
+                                    0,
+                                    shipmentId.length < 8
+                                        ? shipmentId.length
+                                        : 8,
+                                  )
+                                  .toUpperCase());
+                    final pickup =
+                        shipment['pickup_location']?.toString() ??
+                        shipment['pickup_address']?.toString() ??
+                        shipment['pickup_city']?.toString() ??
+                        'Pending';
+                    final drop =
+                        shipment['drop_location']?.toString() ??
+                        shipment['receiver_address']?.toString() ??
+                        shipment['receiver_city']?.toString() ??
+                        'Pending';
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
                       child: Padding(
@@ -201,18 +260,30 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  shipment['tracking_number'] ?? 'Unknown Tracking #',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  trackingNumber,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
                                 ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: AppColors.primaryAmber.withOpacity(0.1),
+                                    color: AppColors.primaryAmber.withValues(
+                                      alpha: 0.1,
+                                    ),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: const Text(
                                     'NEW',
-                                    style: TextStyle(color: AppColors.primaryAmber, fontWeight: FontWeight.bold, fontSize: 12),
+                                    style: TextStyle(
+                                      color: AppColors.primaryAmber,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -220,9 +291,13 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
                             const Divider(height: 24),
                             Row(
                               children: [
-                                const Icon(Icons.circle, size: 12, color: AppColors.supportGreen),
+                                const Icon(
+                                  Icons.circle,
+                                  size: 12,
+                                  color: AppColors.supportGreen,
+                                ),
                                 const SizedBox(width: 8),
-                                Expanded(child: Text('Pickup: ${shipment['pickup_location'] ?? 'Pending'}')),
+                                Expanded(child: Text('Pickup: $pickup')),
                               ],
                             ),
                             Container(
@@ -233,9 +308,13 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
                             ),
                             Row(
                               children: [
-                                const Icon(Icons.location_on, size: 12, color: AppColors.secondaryRed),
+                                const Icon(
+                                  Icons.location_on,
+                                  size: 12,
+                                  color: AppColors.secondaryRed,
+                                ),
                                 const SizedBox(width: 8),
-                                Expanded(child: Text('Drop: ${shipment['drop_location'] ?? 'Pending'}')),
+                                Expanded(child: Text('Drop: $drop')),
                               ],
                             ),
                             const SizedBox(height: 16),
@@ -272,43 +351,84 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
                                         ? null
                                         : () async {
                                             // Start delivery session: ask for receiver phone and optional OTP
-                                            final phoneCtrl = TextEditingController();
-                                            final otpCtrl = TextEditingController();
+                                            final phoneCtrl =
+                                                TextEditingController();
+                                            final otpCtrl =
+                                                TextEditingController();
                                             final result = await showDialog<bool>(
                                               context: context,
                                               builder: (ctx) => AlertDialog(
-                                                title: const Text('Start Delivery'),
+                                                title: const Text(
+                                                  'Start Delivery',
+                                                ),
                                                 content: Column(
-                                                  mainAxisSize: MainAxisSize.min,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
                                                   children: [
                                                     TextField(
                                                       controller: phoneCtrl,
-                                                      decoration: const InputDecoration(labelText: 'Receiver phone'),
-                                                      keyboardType: TextInputType.phone,
+                                                      decoration:
+                                                          const InputDecoration(
+                                                            labelText:
+                                                                'Receiver phone',
+                                                          ),
+                                                      keyboardType:
+                                                          TextInputType.phone,
                                                     ),
                                                     TextField(
                                                       controller: otpCtrl,
-                                                      decoration: const InputDecoration(labelText: 'OTP (optional)'),
+                                                      decoration:
+                                                          const InputDecoration(
+                                                            labelText:
+                                                                'OTP (optional)',
+                                                          ),
                                                     ),
                                                   ],
                                                 ),
                                                 actions: [
-                                                  TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.of(
+                                                          ctx,
+                                                        ).pop(false),
+                                                    child: const Text('Cancel'),
+                                                  ),
                                                   ElevatedButton(
                                                     onPressed: () async {
-                                                      final driver = Supabase.instance.client.auth.currentUser;
+                                                      final driver = Supabase
+                                                          .instance
+                                                          .client
+                                                          .auth
+                                                          .currentUser;
                                                       if (driver == null) {
-                                                        Navigator.of(ctx).pop(false);
+                                                        Navigator.of(
+                                                          ctx,
+                                                        ).pop(false);
                                                         return;
                                                       }
                                                       await LocationService.startDeliverySession(
                                                         shipmentId: shipmentId,
                                                         driverId: driver.id,
-                                                        receiverPhone: phoneCtrl.text.trim(),
-                                                        otp: otpCtrl.text.trim().isEmpty ? null : otpCtrl.text.trim(),
-                                                        otpRequired: otpCtrl.text.trim().isNotEmpty,
+                                                        receiverPhone: phoneCtrl
+                                                            .text
+                                                            .trim(),
+                                                        otp:
+                                                            otpCtrl.text
+                                                                .trim()
+                                                                .isEmpty
+                                                            ? null
+                                                            : otpCtrl.text
+                                                                  .trim(),
+                                                        otpRequired: otpCtrl
+                                                            .text
+                                                            .trim()
+                                                            .isNotEmpty,
                                                       );
-                                                      Navigator.of(ctx).pop(true);
+                                                      if (ctx.mounted) {
+                                                        Navigator.of(
+                                                          ctx,
+                                                        ).pop(true);
+                                                      }
                                                     },
                                                     child: const Text('Start'),
                                                   ),
@@ -316,7 +436,16 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
                                               ),
                                             );
                                             if (result == true) {
-                                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Delivery started')));
+                                              if (!context.mounted) return;
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Delivery started',
+                                                  ),
+                                                ),
+                                              );
                                             }
                                           },
                                     child: const Text('Start Delivery'),
@@ -328,11 +457,31 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
                                     onPressed: shipmentId.isEmpty
                                         ? null
                                         : () async {
-                                            final ok = await LocationService.completeDeliveryByShipment(shipmentId: shipmentId);
+                                            final ok =
+                                                await LocationService.completeDeliveryByShipment(
+                                                  shipmentId: shipmentId,
+                                                );
+                                            if (!context.mounted) return;
                                             if (ok) {
-                                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Delivery marked complete')));
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Delivery marked complete',
+                                                  ),
+                                                ),
+                                              );
                                             } else {
-                                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not complete delivery (check DB)')));
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Could not complete delivery (check DB)',
+                                                  ),
+                                                ),
+                                              );
                                             }
                                           },
                                     child: const Text('Complete Delivery'),
@@ -340,44 +489,76 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
                                 ),
                               ],
                             ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextButton(
-                                        onPressed: () async {
-                                          // Open Live Map viewer for this shipment; ask for receiver phone/otp
-                                          final phoneCtrl = TextEditingController();
-                                          final otpCtrl = TextEditingController();
-                                          final ok = await showDialog<bool>(
-                                            context: context,
-                                            builder: (ctx) => AlertDialog(
-                                              title: const Text('Open Live Map'),
-                                              content: Column(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Receiver phone'), keyboardType: TextInputType.phone),
-                                                  TextField(controller: otpCtrl, decoration: const InputDecoration(labelText: 'OTP (optional)')),
-                                                ],
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextButton(
+                                    onPressed: () async {
+                                      // Open Live Map viewer for this shipment; ask for receiver phone/otp
+                                      final phoneCtrl = TextEditingController();
+                                      final otpCtrl = TextEditingController();
+                                      final ok = await showDialog<bool>(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          title: const Text('Open Live Map'),
+                                          content: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              TextField(
+                                                controller: phoneCtrl,
+                                                decoration:
+                                                    const InputDecoration(
+                                                      labelText:
+                                                          'Receiver phone',
+                                                    ),
+                                                keyboardType:
+                                                    TextInputType.phone,
                                               ),
-                                              actions: [
-                                                TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-                                                ElevatedButton(
-                                                  onPressed: () => Navigator.of(ctx).pop(true),
-                                                  child: const Text('Open'),
-                                                ),
-                                              ],
+                                              TextField(
+                                                controller: otpCtrl,
+                                                decoration:
+                                                    const InputDecoration(
+                                                      labelText:
+                                                          'OTP (optional)',
+                                                    ),
+                                              ),
+                                            ],
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.of(ctx).pop(false),
+                                              child: const Text('Cancel'),
                                             ),
-                                          );
-                                          if (ok == true) {
-                                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => LiveMapScreen(receiverPhone: phoneCtrl.text.trim(), otp: otpCtrl.text.trim().isEmpty ? null : otpCtrl.text.trim())));
-                                          }
-                                        },
-                                        child: const Text('View Live Map'),
-                                      ),
-                                    ),
-                                  ],
+                                            ElevatedButton(
+                                              onPressed: () =>
+                                                  Navigator.of(ctx).pop(true),
+                                              child: const Text('Open'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (ok == true) {
+                                        if (!context.mounted) return;
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => LiveMapScreen(
+                                              receiverPhone: phoneCtrl.text
+                                                  .trim(),
+                                              otp: otpCtrl.text.trim().isEmpty
+                                                  ? null
+                                                  : otpCtrl.text.trim(),
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                    child: const Text('View Live Map'),
+                                  ),
                                 ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
