@@ -58,7 +58,20 @@ class _DOnboardingScreenState extends State<DOnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Driver Onboarding')),
+      appBar: AppBar(
+        title: Row(
+          children: [
+            Image.asset(
+              'assets/images/logo_fleet1.png',
+              width: 36,
+              height: 36,
+              fit: BoxFit.contain,
+            ),
+            const SizedBox(width: 12),
+            const Text('Driver Onboarding'),
+          ],
+        ),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Form(

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/driver_service.dart';
 import '../../../core/services/auth_service.dart';
+import '../../map/screens/live_map_screen.dart';
+import '../../../core/services/location_service.dart';
 
 class DDashboardScreen extends StatefulWidget {
   const DDashboardScreen({super.key});
@@ -39,9 +42,30 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Driver Dashboard'),
+        title: Row(
+          children: [
+            Image.asset(
+              'assets/images/logo_fleet1.png',
+              width: 36,
+              height: 36,
+              fit: BoxFit.contain,
+            ),
+            const SizedBox(width: 12),
+            const Text('Driver Dashboard'),
+          ],
+        ),
         automaticallyImplyLeading: false,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.location_on),
+            onPressed: () {
+              // Quick hint: location sharing is managed per-assignment below.
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('Use the buttons on assignments to start/stop delivery and share location.'),
+                duration: Duration(seconds: 2),
+              ));
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
@@ -135,6 +159,8 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
                 return Column(
                   children: assignedRides.map((ride) {
                     final shipment = ride['shipment'] ?? {};
+                    final shipmentId = shipment['id']?.toString() ?? shipment['shipment_id']?.toString() ?? '';
+                    final trackingNumber = shipment['tracking_number'] ?? 'Unknown Tracking #';
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
                       child: Padding(
@@ -189,7 +215,7 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
                                 Expanded(
                                   child: OutlinedButton(
                                     onPressed: () {
-                                      // Decline logic
+                                      // Decline logic (keeps existing behaviour)
                                     },
                                     child: const Text('Decline'),
                                   ),
@@ -198,13 +224,131 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
                                 Expanded(
                                   child: ElevatedButton(
                                     onPressed: () {
-                                      // Accept logic
+                                      // Accept logic (existing)
                                     },
                                     child: const Text('Accept Ride'),
                                   ),
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green,
+                                    ),
+                                    onPressed: shipmentId.isEmpty
+                                        ? null
+                                        : () async {
+                                            // Start delivery session: ask for receiver phone and optional OTP
+                                            final phoneCtrl = TextEditingController();
+                                            final otpCtrl = TextEditingController();
+                                            final result = await showDialog<bool>(
+                                              context: context,
+                                              builder: (ctx) => AlertDialog(
+                                                title: const Text('Start Delivery'),
+                                                content: Column(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    TextField(
+                                                      controller: phoneCtrl,
+                                                      decoration: const InputDecoration(labelText: 'Receiver phone'),
+                                                      keyboardType: TextInputType.phone,
+                                                    ),
+                                                    TextField(
+                                                      controller: otpCtrl,
+                                                      decoration: const InputDecoration(labelText: 'OTP (optional)'),
+                                                    ),
+                                                  ],
+                                                ),
+                                                actions: [
+                                                  TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                                                  ElevatedButton(
+                                                    onPressed: () async {
+                                                      final driver = Supabase.instance.client.auth.currentUser;
+                                                      if (driver == null) {
+                                                        Navigator.of(ctx).pop(false);
+                                                        return;
+                                                      }
+                                                      await LocationService.startDeliverySession(
+                                                        shipmentId: shipmentId,
+                                                        driverId: driver.id,
+                                                        receiverPhone: phoneCtrl.text.trim(),
+                                                        otp: otpCtrl.text.trim().isEmpty ? null : otpCtrl.text.trim(),
+                                                        otpRequired: otpCtrl.text.trim().isNotEmpty,
+                                                      );
+                                                      Navigator.of(ctx).pop(true);
+                                                    },
+                                                    child: const Text('Start'),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                            if (result == true) {
+                                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Delivery started')));
+                                            }
+                                          },
+                                    child: const Text('Start Delivery'),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: shipmentId.isEmpty
+                                        ? null
+                                        : () async {
+                                            final ok = await LocationService.completeDeliveryByShipment(shipmentId: shipmentId);
+                                            if (ok) {
+                                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Delivery marked complete')));
+                                            } else {
+                                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not complete delivery (check DB)')));
+                                            }
+                                          },
+                                    child: const Text('Complete Delivery'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextButton(
+                                        onPressed: () async {
+                                          // Open Live Map viewer for this shipment; ask for receiver phone/otp
+                                          final phoneCtrl = TextEditingController();
+                                          final otpCtrl = TextEditingController();
+                                          final ok = await showDialog<bool>(
+                                            context: context,
+                                            builder: (ctx) => AlertDialog(
+                                              title: const Text('Open Live Map'),
+                                              content: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Receiver phone'), keyboardType: TextInputType.phone),
+                                                  TextField(controller: otpCtrl, decoration: const InputDecoration(labelText: 'OTP (optional)')),
+                                                ],
+                                              ),
+                                              actions: [
+                                                TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                                                ElevatedButton(
+                                                  onPressed: () => Navigator.of(ctx).pop(true),
+                                                  child: const Text('Open'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                          if (ok == true) {
+                                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => LiveMapScreen(receiverPhone: phoneCtrl.text.trim(), otp: otpCtrl.text.trim().isEmpty ? null : otpCtrl.text.trim())));
+                                          }
+                                        },
+                                        child: const Text('View Live Map'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                           ],
                         ),
                       ),
