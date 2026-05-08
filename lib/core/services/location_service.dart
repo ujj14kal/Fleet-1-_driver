@@ -31,7 +31,7 @@ class LocationService {
   static Future<Map<String, dynamic>?> startDeliverySession({
     required String shipmentId,
     required String driverId,
-    required String receiverPhone,
+    String receiverPhone = '',
     String? otp,
     bool otpRequired = true,
   }) async {

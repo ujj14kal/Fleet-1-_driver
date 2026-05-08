@@ -86,11 +86,70 @@ class DriverService {
     );
     final newPhotos = await _uploadLicensePhotos(user.id, licensePhotos);
 
-    await _client.from('drivers').upsert({
-      'id': user.id,
+    final payload = <String, dynamic>{
       'license_photos': [...currentPhotos, ...newPhotos],
       'is_license_uploaded': true,
-    });
+    };
+
+    try {
+      await _client.from('drivers').update(payload).eq('id', user.id);
+    } catch (_) {
+      await _client.from('drivers').upsert({
+        'id': user.id,
+        'full_name': existing?['full_name'],
+        'phone': existing?['phone'],
+        'age': existing?['age'],
+        ...payload,
+      });
+    }
+  }
+
+  static bool canEditProfile(Map<String, dynamic>? profile) {
+    final editedAt = DateTime.tryParse(
+      profile?['profile_last_edited_at']?.toString() ?? '',
+    );
+    if (editedAt == null) return true;
+    return DateTime.now().toUtc().difference(editedAt.toUtc()) >=
+        const Duration(hours: 24);
+  }
+
+  static Duration profileEditWait(Map<String, dynamic>? profile) {
+    final editedAt = DateTime.tryParse(
+      profile?['profile_last_edited_at']?.toString() ?? '',
+    );
+    if (editedAt == null) return Duration.zero;
+    final remaining =
+        const Duration(hours: 24) -
+        DateTime.now().toUtc().difference(editedAt.toUtc());
+    return remaining.isNegative ? Duration.zero : remaining;
+  }
+
+  static Future<void> updateProfile({
+    required String fullName,
+    required String phone,
+    required int age,
+  }) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw Exception('No user logged in');
+
+    final profile = await getDriverProfile();
+    if (!canEditProfile(profile)) {
+      final wait = profileEditWait(profile);
+      throw Exception(
+        'Profile can be edited again in ${wait.inHours}h ${wait.inMinutes.remainder(60)}m.',
+      );
+    }
+
+    final now = DateTime.now().toUtc().toIso8601String();
+    await _client
+        .from('drivers')
+        .update({
+          'full_name': fullName,
+          'phone': phone,
+          'age': age,
+          'profile_last_edited_at': now,
+        })
+        .eq('id', user.id);
   }
 
   static Future<Map<String, dynamic>?> getDriverProfile() async {
@@ -131,7 +190,13 @@ class DriverService {
       final ext = file.path.split('.').last.toLowerCase();
       final fileName =
           '$userId/license_${DateTime.now().millisecondsSinceEpoch}_$i.$ext';
-      await _client.storage.from('driver_documents').upload(fileName, file);
+      await _client.storage
+          .from('driver_documents')
+          .upload(
+            fileName,
+            file,
+            fileOptions: const FileOptions(upsert: false),
+          );
       final url = _client.storage
           .from('driver_documents')
           .getPublicUrl(fileName);

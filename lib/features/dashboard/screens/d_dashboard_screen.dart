@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/services/driver_service.dart';
 import '../../../core/services/location_service.dart';
-import '../../map/screens/live_map_screen.dart';
 
 class DDashboardScreen extends StatefulWidget {
   const DDashboardScreen({super.key});
@@ -91,136 +91,128 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
     }
   }
 
-  Future<String?> _askForReceiverPhone({String? initialPhone}) async {
-    final phoneCtrl = TextEditingController(text: initialPhone ?? '');
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Receiver phone'),
-        content: TextField(
-          controller: phoneCtrl,
-          decoration: const InputDecoration(labelText: 'Receiver phone'),
-          keyboardType: TextInputType.phone,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(phoneCtrl.text.trim()),
-            child: const Text('Continue'),
-          ),
-        ],
-      ),
-    );
-    phoneCtrl.dispose();
-    return result?.trim().isEmpty == true ? null : result?.trim();
-  }
-
   Future<void> _startDelivery(Map<String, dynamic> shipment) async {
     final user = Supabase.instance.client.auth.currentUser;
     final shipmentId = _shipmentId(shipment);
     if (user == null || shipmentId.isEmpty) return;
 
-    final savedPhone = shipment['receiver_phone']?.toString().trim() ?? '';
-    final receiverPhone = savedPhone.isNotEmpty
-        ? savedPhone
-        : await _askForReceiverPhone();
-    if (receiverPhone == null || receiverPhone.isEmpty) return;
-
-    final session = await LocationService.startDeliverySession(
+    await LocationService.startDeliverySession(
       shipmentId: shipmentId,
       driverId: user.id,
-      receiverPhone: receiverPhone,
+      receiverPhone: shipment['receiver_phone']?.toString().trim() ?? '',
       otpRequired: false,
     );
+
+    final opened = await _openGoogleMapsRoute(shipment);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          session == null
-              ? 'Delivery start saved where permitted. Check database policies if it does not sync.'
-              : 'Delivery started',
+          opened
+              ? 'Ride started in Google Maps'
+              : 'Ride started, but no route could be opened from this shipment location data.',
         ),
       ),
     );
   }
 
-  Future<void> _endDelivery(Map<String, dynamic> shipment) async {
-    final user = Supabase.instance.client.auth.currentUser;
-    final shipmentId = _shipmentId(shipment);
-    if (user == null || shipmentId.isEmpty) return;
-
-    final savedPhone = shipment['receiver_phone']?.toString().trim() ?? '';
-    final receiverPhone = savedPhone.isNotEmpty
-        ? savedPhone
-        : await _askForReceiverPhone();
-    if (receiverPhone == null || receiverPhone.isEmpty) return;
-
-    try {
-      await LocationService.requestCompletionOtp(
-        shipmentId: shipmentId,
-        driverId: user.id,
-        receiverPhone: receiverPhone,
-      );
-    } catch (e) {
-      if (!mounted) return;
+  Future<void> _editProfile() async {
+    final profile = _driverProfile ?? {};
+    final canEdit = DriverService.canEditProfile(profile);
+    if (!canEdit) {
+      final wait = DriverService.profileEditWait(profile);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not create delivery OTP: $e')),
+        SnackBar(
+          content: Text(
+            'Profile can be edited again in ${wait.inHours}h ${wait.inMinutes.remainder(60)}m.',
+          ),
+        ),
       );
       return;
     }
 
-    if (!mounted) return;
-    final otpCtrl = TextEditingController();
-    final otp = await showDialog<String>(
+    final nameCtrl = TextEditingController(text: _driverName);
+    final phoneCtrl = TextEditingController(
+      text: profile['phone']?.toString() ?? '',
+    );
+    final ageCtrl = TextEditingController(
+      text: profile['age']?.toString() ?? '',
+    );
+    final formKey = GlobalKey<FormState>();
+    final shouldSave = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Receiver OTP'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('OTP sent to ${_maskedPhone(receiverPhone)}.'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: otpCtrl,
-              decoration: const InputDecoration(labelText: 'Enter OTP'),
-              keyboardType: TextInputType.number,
-            ),
-          ],
+        title: const Text('Edit profile'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Full name'),
+                validator: (value) =>
+                    value == null || value.trim().isEmpty ? 'Enter name' : null,
+              ),
+              TextFormField(
+                controller: phoneCtrl,
+                decoration: const InputDecoration(labelText: 'Phone'),
+                keyboardType: TextInputType.phone,
+                validator: (value) => value == null || value.trim().isEmpty
+                    ? 'Enter phone'
+                    : null,
+              ),
+              TextFormField(
+                controller: ageCtrl,
+                decoration: const InputDecoration(labelText: 'Age'),
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  final age = int.tryParse(value ?? '');
+                  if (age == null || age < 18) return 'Enter valid age';
+                  return null;
+                },
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
+            onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(otpCtrl.text.trim()),
-            child: const Text('End Ride'),
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.of(ctx).pop(true);
+              }
+            },
+            child: const Text('Save'),
           ),
         ],
       ),
     );
-    otpCtrl.dispose();
-
-    if (otp == null || otp.isEmpty) return;
-    final ok = await LocationService.completeDeliveryWithOtp(
-      shipmentId: shipmentId,
-      driverId: user.id,
-      otp: otp,
-    );
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          ok
-              ? 'Delivery marked delivered'
-              : 'Invalid OTP. Delivery was not completed.',
-        ),
-      ),
-    );
+    if (shouldSave == true) {
+      try {
+        await DriverService.updateProfile(
+          fullName: nameCtrl.text.trim(),
+          phone: phoneCtrl.text.trim(),
+          age: int.parse(ageCtrl.text.trim()),
+        );
+        await _checkProfile();
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Profile updated')));
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not update profile: $e')));
+      }
+    }
+    nameCtrl.dispose();
+    phoneCtrl.dispose();
+    ageCtrl.dispose();
   }
 
   void _showProfile() {
@@ -257,6 +249,15 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
             if (photos.isNotEmpty)
               _ProfileRow(label: 'License photos', value: '${photos.length}'),
             const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                _editProfile();
+              },
+              icon: const Icon(Icons.edit_rounded),
+              label: const Text('Edit Profile'),
+            ),
+            const SizedBox(height: 8),
             ElevatedButton.icon(
               onPressed: _isUploadingLicense
                   ? null
@@ -430,8 +431,6 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
                     return _AssignmentCard(
                       shipment: shipment,
                       onStart: () => _startDelivery(shipment),
-                      onEnd: () => _endDelivery(shipment),
-                      onOpenMap: () => _openLiveMap(shipment),
                     );
                   }).toList(),
                 );
@@ -443,55 +442,38 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
     );
   }
 
-  Future<void> _openLiveMap(Map<String, dynamic> shipment) async {
-    final phoneCtrl = TextEditingController(
-      text: shipment['receiver_phone']?.toString() ?? '',
+  Future<bool> _openGoogleMapsRoute(Map<String, dynamic> shipment) async {
+    final origin = _mapsPoint(
+      shipment,
+      const [
+        ['pickup_latitude', 'pickup_longitude'],
+        ['pickup_lat', 'pickup_lng'],
+        ['pickup_lat', 'pickup_long'],
+        ['origin_latitude', 'origin_longitude'],
+      ],
+      ['pickup_location', 'pickup_address', 'pickup_city'],
     );
-    final otpCtrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Open Live Map'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: phoneCtrl,
-              decoration: const InputDecoration(labelText: 'Receiver phone'),
-              keyboardType: TextInputType.phone,
-            ),
-            TextField(
-              controller: otpCtrl,
-              decoration: const InputDecoration(labelText: 'OTP (optional)'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Open'),
-          ),
-        ],
-      ),
+    final destination = _mapsPoint(
+      shipment,
+      const [
+        ['receiver_latitude', 'receiver_longitude'],
+        ['receiver_lat', 'receiver_lng'],
+        ['drop_latitude', 'drop_longitude'],
+        ['drop_lat', 'drop_lng'],
+        ['destination_latitude', 'destination_longitude'],
+      ],
+      ['drop_location', 'receiver_address', 'receiver_city'],
     );
-    final phone = phoneCtrl.text.trim();
-    final otp = otpCtrl.text.trim();
-    phoneCtrl.dispose();
-    otpCtrl.dispose();
-    if (ok == true && mounted) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => LiveMapScreen(
-            receiverPhone: phone,
-            otp: otp.isEmpty ? null : otp,
-          ),
-        ),
-      );
-    }
+
+    if (origin == null || destination == null) return false;
+
+    final uri = Uri.https('www.google.com', '/maps/dir/', {
+      'api': '1',
+      'origin': origin,
+      'destination': destination,
+      'travelmode': 'driving',
+    });
+    return launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   String get _driverName {
@@ -511,10 +493,22 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
   static String _shipmentId(Map<String, dynamic> shipment) =>
       shipment['id']?.toString() ?? shipment['shipment_id']?.toString() ?? '';
 
-  static String _maskedPhone(String phone) {
-    final digits = phone.replaceAll(RegExp(r'\D'), '');
-    if (digits.length <= 4) return phone;
-    return '${digits.substring(0, 2)}******${digits.substring(digits.length - 2)}';
+  static String? _mapsPoint(
+    Map<String, dynamic> shipment,
+    List<List<String>> coordinateKeys,
+    List<String> textKeys,
+  ) {
+    for (final pair in coordinateKeys) {
+      final lat = num.tryParse(shipment[pair[0]]?.toString() ?? '');
+      final lng = num.tryParse(shipment[pair[1]]?.toString() ?? '');
+      if (lat != null && lng != null) return '$lat,$lng';
+    }
+
+    final parts = textKeys
+        .map((key) => shipment[key]?.toString().trim() ?? '')
+        .where((value) => value.isNotEmpty && value.toLowerCase() != 'null')
+        .toList();
+    return parts.isEmpty ? null : parts.join(', ');
   }
 }
 
@@ -560,15 +554,8 @@ class _GreetingCard extends StatelessWidget {
 class _AssignmentCard extends StatelessWidget {
   final Map<String, dynamic> shipment;
   final VoidCallback onStart;
-  final VoidCallback onEnd;
-  final VoidCallback onOpenMap;
 
-  const _AssignmentCard({
-    required this.shipment,
-    required this.onStart,
-    required this.onEnd,
-    required this.onOpenMap,
-  });
+  const _AssignmentCard({required this.shipment, required this.onStart});
 
   @override
   Widget build(BuildContext context) {
@@ -663,54 +650,14 @@ class _AssignmentCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {},
-                    child: const Text('Decline'),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    child: const Text('Accept Ride'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                    ),
-                    onPressed: shipmentId.isEmpty ? null : onStart,
-                    child: const Text('Start Delivery'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: shipmentId.isEmpty ? null : onEnd,
-                    child: const Text('End Ride'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: onOpenMap,
-                    child: const Text('View Live Map'),
-                  ),
-                ),
-              ],
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                onPressed: shipmentId.isEmpty ? null : onStart,
+                icon: const Icon(Icons.navigation_rounded),
+                label: const Text('Start Ride'),
+              ),
             ),
           ],
         ),
