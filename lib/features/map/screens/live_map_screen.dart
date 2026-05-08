@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class LiveMapScreen extends StatefulWidget {
   final String receiverPhone;
@@ -36,7 +35,10 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
   void _startPolling() {
     // Try immediately then every 5 seconds
     _fetchLocations();
-    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _fetchLocations());
+    _pollTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _fetchLocations(),
+    );
   }
 
   Future<void> _fetchLocations() async {
@@ -56,7 +58,8 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
   void _updateMarkers(List locations) {
     final newMarkers = <MarkerId, Marker>{};
     for (var loc in locations) {
-      final driverId = (loc['driver_id'] ?? loc['driver'])?.toString() ?? 'unknown';
+      final driverId =
+          (loc['driver_id'] ?? loc['driver'])?.toString() ?? 'unknown';
       final lat = (loc['latitude'] ?? loc['lat']) as num?;
       final lng = (loc['longitude'] ?? loc['lng']) as num?;
       final recordedAt = loc['recorded_at']?.toString() ?? '';
@@ -84,11 +87,17 @@ class _LiveMapScreenState extends State<LiveMapScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: Text(_placeholderApiKeyNotice, style: Theme.of(context).textTheme.bodySmall),
+            child: Text(
+              _placeholderApiKeyNotice,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ),
           Expanded(
             child: GoogleMap(
-              initialCameraPosition: const CameraPosition(target: LatLng(20.5937, 78.9629), zoom: 4),
+              initialCameraPosition: const CameraPosition(
+                target: LatLng(20.5937, 78.9629),
+                zoom: 4,
+              ),
               markers: Set<Marker>.of(_markers.values),
               onMapCreated: (c) => _controller = c,
             ),

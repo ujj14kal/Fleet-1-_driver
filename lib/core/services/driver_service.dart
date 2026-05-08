@@ -63,18 +63,7 @@ class DriverService {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('No user logged in');
 
-    final List<String> photoUrls = [];
-    for (int i = 0; i < licensePhotos.length; i++) {
-      final file = licensePhotos[i];
-      final ext = file.path.split('.').last;
-      final fileName =
-          '${user.id}/license_${DateTime.now().millisecondsSinceEpoch}_$i.$ext';
-      await _client.storage.from('driver_documents').upload(fileName, file);
-      final url = _client.storage
-          .from('driver_documents')
-          .getPublicUrl(fileName);
-      photoUrls.add(url);
-    }
+    final photoUrls = await _uploadLicensePhotos(user.id, licensePhotos);
 
     await _client.from('drivers').upsert({
       'id': user.id,
@@ -83,6 +72,24 @@ class DriverService {
       'age': age,
       'license_photos': photoUrls,
       'is_license_uploaded': photoUrls.isNotEmpty,
+    });
+  }
+
+  static Future<void> uploadLicensePhotos(List<File> licensePhotos) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw Exception('No user logged in');
+    if (licensePhotos.isEmpty) return;
+
+    final existing = await getDriverProfile();
+    final currentPhotos = List<String>.from(
+      (existing?['license_photos'] as List?) ?? const [],
+    );
+    final newPhotos = await _uploadLicensePhotos(user.id, licensePhotos);
+
+    await _client.from('drivers').upsert({
+      'id': user.id,
+      'license_photos': [...currentPhotos, ...newPhotos],
+      'is_license_uploaded': true,
     });
   }
 
@@ -113,4 +120,23 @@ class DriverService {
 
   static String _digitsOnly(String value) =>
       value.replaceAll(RegExp(r'\D'), '');
+
+  static Future<List<String>> _uploadLicensePhotos(
+    String userId,
+    List<File> licensePhotos,
+  ) async {
+    final List<String> photoUrls = [];
+    for (int i = 0; i < licensePhotos.length; i++) {
+      final file = licensePhotos[i];
+      final ext = file.path.split('.').last.toLowerCase();
+      final fileName =
+          '$userId/license_${DateTime.now().millisecondsSinceEpoch}_$i.$ext';
+      await _client.storage.from('driver_documents').upload(fileName, file);
+      final url = _client.storage
+          .from('driver_documents')
+          .getPublicUrl(fileName);
+      photoUrls.add(url);
+    }
+    return photoUrls;
+  }
 }

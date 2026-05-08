@@ -17,16 +17,39 @@ class _DOnboardingScreenState extends State<DOnboardingScreen> {
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _ageCtrl = TextEditingController();
-  
-  List<XFile> _licensePhotos = [];
+
+  final List<XFile> _licensePhotos = [];
   final ImagePicker _picker = ImagePicker();
   bool _isLoading = false;
 
   Future<void> _pickLicensePhotos() async {
-    final List<XFile> picked = await _picker.pickMultiImage();
-    if (picked.isNotEmpty) {
+    final picked = await _picker.pickImage(source: ImageSource.camera);
+    if (picked == null || !mounted) return;
+
+    final shouldAdd = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Review license photo'),
+        content: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.file(File(picked.path), fit: BoxFit.cover),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Retake'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Use Photo'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldAdd == true) {
       setState(() {
-        _licensePhotos.addAll(picked);
+        _licensePhotos.add(picked);
       });
     }
   }
@@ -45,9 +68,9 @@ class _DOnboardingScreenState extends State<DOnboardingScreen> {
         if (mounted) context.go('/dashboard');
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: ${e.toString()}')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
         }
       } finally {
         if (mounted) setState(() => _isLoading = false);
@@ -67,7 +90,13 @@ class _DOnboardingScreenState extends State<DOnboardingScreen> {
                 color: Colors.transparent,
                 border: Border.all(color: Color(0xFFFFD700), width: 2.5),
                 borderRadius: BorderRadius.circular(6),
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
               child: Image.asset(
                 'assets/images/logo_fleet1.png',
@@ -91,9 +120,9 @@ class _DOnboardingScreenState extends State<DOnboardingScreen> {
               Text(
                 'Complete Your Profile',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryNavy,
-                    ),
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primaryNavy,
+                ),
               ),
               const SizedBox(height: 24),
               TextFormField(
@@ -106,7 +135,8 @@ class _DOnboardingScreenState extends State<DOnboardingScreen> {
                 controller: _phoneCtrl,
                 decoration: const InputDecoration(labelText: 'Phone Number'),
                 keyboardType: TextInputType.phone,
-                validator: (v) => v!.isEmpty ? 'Please enter your phone number' : null,
+                validator: (v) =>
+                    v!.isEmpty ? 'Please enter your phone number' : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -118,16 +148,16 @@ class _DOnboardingScreenState extends State<DOnboardingScreen> {
               const SizedBox(height: 24),
               Text(
                 'Driving License Photos (Optional)',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Text(
                 'You can skip this now, but it is required for verification later.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textMuted,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
               ),
               const SizedBox(height: 16),
               Wrap(
@@ -157,7 +187,11 @@ class _DOnboardingScreenState extends State<DOnboardingScreen> {
                             },
                             child: Container(
                               color: Colors.black54,
-                              child: const Icon(Icons.close, color: Colors.white, size: 16),
+                              child: const Icon(
+                                Icons.close,
+                                color: Colors.white,
+                                size: 16,
+                              ),
                             ),
                           ),
                         ),
@@ -174,7 +208,10 @@ class _DOnboardingScreenState extends State<DOnboardingScreen> {
                         borderRadius: BorderRadius.circular(8),
                         color: AppColors.cardBg,
                       ),
-                      child: const Icon(Icons.add_a_photo, color: AppColors.primaryNavy),
+                      child: const Icon(
+                        Icons.add_a_photo,
+                        color: AppColors.primaryNavy,
+                      ),
                     ),
                   ),
                 ],
@@ -185,7 +222,9 @@ class _DOnboardingScreenState extends State<DOnboardingScreen> {
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _submit,
                   child: _isLoading
-                      ? const CircularProgressIndicator(color: AppColors.supportDark)
+                      ? const CircularProgressIndicator(
+                          color: AppColors.supportDark,
+                        )
                       : const Text('Complete Onboarding'),
                 ),
               ),
