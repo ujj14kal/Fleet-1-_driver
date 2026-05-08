@@ -18,6 +18,7 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
   bool _isLicenseUploaded = true;
   bool _isLoading = true;
   String? _driverId;
+  String? _driverPhone;
 
   @override
   void initState() {
@@ -31,6 +32,7 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
       setState(() {
         _isLicenseUploaded = profile?['is_license_uploaded'] ?? false;
         _driverId = profile?['id'] as String?;
+        _driverPhone = profile?['phone'] as String?;
         _isLoading = false;
       });
     }
@@ -156,42 +158,14 @@ class _DDashboardScreenState extends State<DDashboardScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            // In-app notifications (realtime)
-            if (_driverId != null)
-              StreamBuilder<List<Map<String, dynamic>>>(
-                stream: DriverService.streamDriverNotifications(_driverId!),
-                builder: (context, notifSnap) {
-                  if (!notifSnap.hasData || (notifSnap.data?.isEmpty ?? true)) {
-                    return const SizedBox.shrink();
-                  }
-                  final latest = notifSnap.data!.first;
-                  final msg = latest['message'] as String? ?? '';
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.navyLight,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.notifications,
-                          color: AppColors.primaryNavy,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(msg)),
-                      ],
-                    ),
-                  );
-                },
-              ),
-
             // Shipments assigned directly to this driver (realtime)
             StreamBuilder<List<Map<String, dynamic>>>(
               stream: _driverId == null
                   ? const Stream.empty()
-                  : DriverService.streamAssignedShipments(_driverId!),
+                  : DriverService.streamAssignedShipments(
+                      _driverId!,
+                      driverPhone: _driverPhone,
+                    ),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(

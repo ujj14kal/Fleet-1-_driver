@@ -4,46 +4,53 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class DriverService {
   static final _client = Supabase.instance.client;
 
-  /// One-time fetch of all shipments assigned to this driver (by driver_id column)
-  static Future<List<Map<String, dynamic>>> fetchAssignedShipments(String driverId) async {
+  /// One-time fetch of all shipments assigned to this driver.
+  static Future<List<Map<String, dynamic>>> fetchAssignedShipments(
+    String driverId, {
+    String? driverPhone,
+  }) async {
     try {
       final data = await _client
           .from('shipments')
           .select()
-          .eq('driver_id', driverId)
           .order('created_at', ascending: false);
-      return List<Map<String, dynamic>>.from(data as List);
+      return List<Map<String, dynamic>>.from(data as List)
+          .where((shipment) => _matchesDriver(shipment, driverId, driverPhone))
+          .toList();
     } catch (_) {
       return [];
     }
   }
 
-  /// Realtime stream of shipments where driver_id = driverId
-  static Stream<List<Map<String, dynamic>>> streamAssignedShipments(String driverId) {
+  /// Realtime stream of shipments assigned by driver_id, with phone fallback.
+  static Stream<List<Map<String, dynamic>>> streamAssignedShipments(
+    String driverId, {
+    String? driverPhone,
+  }) {
     if (driverId.isEmpty) return const Stream.empty();
     return _client
         .from('shipments')
         .stream(primaryKey: ['id'])
-        .eq('driver_id', driverId)
         .order('created_at', ascending: false)
-        .map((rows) => List<Map<String, dynamic>>.from(rows));
-  }
-
-  /// Realtime stream of driver_notifications for this driver
-  static Stream<List<Map<String, dynamic>>> streamDriverNotifications(String driverId) {
-    if (driverId.isEmpty) return const Stream.empty();
-    return _client
-        .from('driver_notifications')
-        .stream(primaryKey: ['id'])
-        .eq('driver_id', driverId)
-        .order('created_at', ascending: false)
-        .map((rows) => List<Map<String, dynamic>>.from(rows));
+        .map(
+          (rows) => List<Map<String, dynamic>>.from(rows)
+              .where(
+                (shipment) => _matchesDriver(shipment, driverId, driverPhone),
+              )
+              .toList(),
+        );
   }
 
   /// Save/update device token for push notifications
-  static Future<void> saveDeviceToken(String driverId, String deviceToken) async {
+  static Future<void> saveDeviceToken(
+    String driverId,
+    String deviceToken,
+  ) async {
     try {
-      await _client.from('drivers').update({'device_token': deviceToken}).eq('id', driverId);
+      await _client
+          .from('drivers')
+          .update({'device_token': deviceToken})
+          .eq('id', driverId);
     } catch (_) {}
   }
 
@@ -60,9 +67,12 @@ class DriverService {
     for (int i = 0; i < licensePhotos.length; i++) {
       final file = licensePhotos[i];
       final ext = file.path.split('.').last;
-      final fileName = '${user.id}/license_${DateTime.now().millisecondsSinceEpoch}_$i.$ext';
+      final fileName =
+          '${user.id}/license_${DateTime.now().millisecondsSinceEpoch}_$i.$ext';
       await _client.storage.from('driver_documents').upload(fileName, file);
-      final url = _client.storage.from('driver_documents').getPublicUrl(fileName);
+      final url = _client.storage
+          .from('driver_documents')
+          .getPublicUrl(fileName);
       photoUrls.add(url);
     }
 
@@ -79,6 +89,28 @@ class DriverService {
   static Future<Map<String, dynamic>?> getDriverProfile() async {
     final user = _client.auth.currentUser;
     if (user == null) return null;
-    return await _client.from('drivers').select().eq('id', user.id).maybeSingle();
+    return await _client
+        .from('drivers')
+        .select()
+        .eq('id', user.id)
+        .maybeSingle();
   }
+
+  static bool _matchesDriver(
+    Map<String, dynamic> shipment,
+    String driverId,
+    String? driverPhone,
+  ) {
+    final shipmentDriverId = shipment['driver_id']?.toString() ?? '';
+    if (shipmentDriverId == driverId) return true;
+
+    final phone = _digitsOnly(driverPhone ?? '');
+    final shipmentPhone = _digitsOnly(
+      shipment['driver_phone']?.toString() ?? '',
+    );
+    return phone.isNotEmpty && shipmentPhone == phone;
+  }
+
+  static String _digitsOnly(String value) =>
+      value.replaceAll(RegExp(r'\D'), '');
 }
